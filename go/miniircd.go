@@ -7,7 +7,7 @@ import ("fmt"
 		)
 
 type Channel struct {
-	server  Server
+	server  *Server
 	clients map[string]Client
 	name string
 	_topic string
@@ -32,7 +32,7 @@ func (c *Channel) set_topic(topic string) {
 }
 
 func (c *Channel) get_key() string {
-	return self._key
+	return c._key
 }
 
 func (c *Channel) set_key(key string) {
@@ -55,14 +55,14 @@ func (c *Channel) _write_state() {
 }
 
 type Client struct {
-	server Server
+	server *Server
 	socket net.Conn
 	channels []Channel
 	nickname string
 	user string
 	realname string
 	addr net.TCPAddr
-	__timestamp Time
+	__timestamp time.Time
 	__readbuffer []byte
 	__writebuffer []byte
 	__sent_ping bool
@@ -84,15 +84,14 @@ func (c *Client) check_aliveness() {
 		if c.__handle_command == c.__command_handler {
 			c.message(fmt.Sprintf("PING :%s", c.server.name))
 			c.__sent_ping = true
-		}
-		else{
+		}		else
+		{
 		c.disconnect("ping timeout")
-		return
 		}
 	}
 }
 
-func (c *Client) write_queue_size() uint {
+func (c *Client) write_queue_size() int {
 	return len(c.__writebuffer)
 }
 
@@ -169,31 +168,28 @@ type Server struct {
 	logdir string
 	statedir string
 	name string
-	channels []Channel
-	clients []Client
+	channels map[string]Channel
+	clients map[net.Conn]Client
 	nicknames map[string]Client
 }
 
 func (s *Server) get_client(nickname string) Client {
-	if s.nicknames[nickname] {
-		return s.nicknames[nickname]
-	}
-	return nil
+	return s.nicknames[nickname]
 }
 
 func (s *Server) has_channel(name string) bool {
-	if s.channels[name] {
+	if val, ok := s.channels[name]; ok {
 		return true
 	}
 	return false
 }
 
 func (s *Server) get_channel(channelname string) Channel {
-	if s.channels[channelname] {
+	var channel Channel
+	if val, ok := s.channels[channelname]; ok {
 		channel = s.channels[channelname]
-	}
-	else {
-		channel = Channel{name: channelname}
+	}	else {
+		channel = Channel{name: channelname, server: s}
 		s.channels[channelname] = channel
 	}
 	return channel
@@ -212,25 +208,25 @@ func (s *Server) print_info(msg string) {
 
 func (s *Server) print_debug(msg string) {
 	if s.debug {
-		fmt.Fprintf(Stderr, msg)
+		fmt.Fprintf(os.Stderr, msg)
 	}
 
 }
 
 func (s *Server) print_error(msg string) {
-	fmt.Fprintf(Stderr, msg)
+	fmt.Fprintf(os.Stderr, msg)
 }
 
 func (s *Server) client_changed_nickname(client Client, oldnickname string) {
-	if oldnickname {
+	if len(oldnickname) > 0 {
 		delete(s.nicknames, oldnickname)
 	}
 	s.nicknames[client.nickname] = client
 }
 
 func (s *Server) remove_member_from_channel(client Client, channelname string) {
-	if s.channels[channelname] {
-		channel = s.channels[channelname]
+	if val, ok := s.channels[channelname]; ok {
+		channel := s.channels[channelname]
 		channel.remove_client(client)
 	}
 
@@ -239,22 +235,27 @@ func (s *Server) remove_member_from_channel(client Client, channelname string) {
 func (s *Server) remove_client(client Client, quitmsg string) {
 	client.message_related(fmt.Sprintf(":%s QUIT :%s", client.get_prefix(), quitmsg))
 	var keys []string
-	for k := range c.channels {
-		client.channel_log(c.channels[k], fmt.Sprintf("quit (%s)", quitmsg))
+	for k := range client.channels {
+		client.channel_log(client.channels[k], fmt.Sprintf("quit (%s)", quitmsg))
 	}
-	if client.nickname && s.nicknames[client.nickname]{
+	if len(client.nickname) > 0 {
+		if val, ok := s.nicknames[client.nickname]; ok {
 		delete(s.nicknames, client.nickname)
+		}
 	}
 	delete(s.clients, client.socket)
 }
 
-func (s *Server) remove_channel(channel Channel) {
+func (s *Server) remove_channel(channel *Channel) {
 	delete(s.channels, channel.name)
 }
 
 
 func (s *Server) Start() {
+	s.name = "localhost"
 	s.nicknames = make(map[string]Client)
+	s.clients = make(map[net.Conn]Client)
+	s.channels = make(map[string]Channel)
 	listener, err := net.Listen("tcp", ":6667")
 	handleError(err)
 	for {
@@ -274,8 +275,8 @@ func (s *Server) handleClient(conn net.Conn) {
 	defer conn.Close()
 	// IRC RFC is 512 bytes
 	var buf [512]byte
-	c := Client{socket:conn}
-	s.clients = append(s.clients, c)
+	c := Client{socket:conn, server:s}
+	s.clients[conn] = c
 	for {
 		// read upto 512 bytes
 		n, err := c.socket.Read(buf[0:])
