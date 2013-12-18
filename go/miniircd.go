@@ -67,78 +67,109 @@ type Client struct {
 	__readbuffer     []byte
 	__writebuffer    []byte
 	__sent_ping      bool
-	__handle_command func(*Client)
+	__handle_command func(*Client, string, []string)
 }
 
-func (c *Client) away_handler() {
-
-}
-
-func (c *Client) ison_handler() {
+func (c *Client) away_handler(arguments []string) {
 
 }
 
-func (c *Client) join_handler() {
+func (c *Client) ison_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply_461("ISON")
+	}
 
 }
 
-func (c *Client) list_handler() {
+func (c *Client) join_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply_461("JOIN")
+	}
+}
+
+func (c *Client) list_handler(arguments []string) {
 
 }
 
-func (c *Client) lusers_handler() {
+func (c *Client) lusers_handler(arguments []string) {
+	c.send_lusers()
+}
+
+func (c *Client) mode_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply_461("MODE")
+	}
+}
+
+func (c *Client) motd_handler(arguments []string) {
+	c.send_motd()
+}
+
+func (c *Client) nick_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply("431 :No nickname given")
+	}
+}
+
+func (c *Client) notice_and_privmsg_handler(arguments []string) {
+	if len(arguments) == 0 {
+		c.reply(fmt.Sprintf("411 %s :No recipient given", c.nickname))
+	} else if len(arguments) == 1 {
+		c.reply(fmt.Sprintf("412 %s :No text to send", c.nickname))
+	} else {
+
+	}
+}
+
+func (c *Client) part_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply_461("PART")
+	}
+}
+
+func (c *Client) ping_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply(fmt.Sprintf("409 %s :No origin specified", c.nickname))
+	} else {
+		c.reply(fmt.Sprintf("PONG %s :%s", c.server.name, arguments[0]))
+	}
+}
+
+func (c *Client) pong_handler(arguments []string) {
 
 }
 
-func (c *Client) mode_handler() {
+func (c *Client) quit_handler(arguments []string) {
+	var quitmsg string
+	if len(arguments) < 1 {
+		quitmsg = c.nickname
+	} else {
+		quitmsg = arguments[0]
+	}
+	c.disconnect(quitmsg)
+}
+
+func (c *Client) topic_handler(arguments []string) {
+	if len(arguments) < 1 {
+		c.reply_461("TOPIC")
+	} else {
+
+	}
+}
+
+func (c *Client) wallops_handler(arguments []string) {
 
 }
 
-func (c *Client) motd_handler() {
+func (c *Client) who_handler(arguments []string) {
 
 }
 
-func (c *Client) nick_handler() {
+func (c *Client) whois_handler(arguments []string) {
 
 }
 
-func (c *Client) notice_and_privmsg_handler() {
-
-}
-
-func (c *Client) part_handler() {
-
-}
-
-func (c *Client) ping_handler() {
-
-}
-
-func (c *Client) pong_handler() {
-
-}
-
-func (c *Client) quit_handler() {
-
-}
-
-func (c *Client) topic_handler() {
-
-}
-
-func (c *Client) wallops_handler() {
-
-}
-
-func (c *Client) who_handler() {
-
-}
-
-func (c *Client) whois_handler() {
-
-}
-
-var handlerTable = map[string]func(*Client){
+var handlerTable = map[string]func(*Client, []string){
 	"AWAY":    (*Client).away_handler,
 	"ISON":    (*Client).ison_handler,
 	"JOIN":    (*Client).join_handler,
@@ -159,7 +190,8 @@ var handlerTable = map[string]func(*Client){
 	"WHOIS":   (*Client).whois_handler,
 }
 
-func (c *Client) processCommand() {
+func (c *Client) processCommand(command string, arguments []string) {
+	handlerTable[command](c, arguments)
 
 }
 
